@@ -751,6 +751,8 @@ void RxApplet::buildUI()
 
         connect(m_sqlBtn, &QPushButton::toggled, this, [this](bool on) {
             if (m_slice) m_slice->setSquelch(on, m_sqlSlider->value());
+            if (!on && m_sqlAutoBtn && m_sqlAutoBtn->isChecked())
+                m_sqlAutoBtn->setChecked(false);  // turning off squelch also disables auto-squelch
         });
         connect(m_sqlSlider, &QSlider::valueChanged, this, [this](int v) {
             if (m_slice && m_sqlBtn->isChecked())
