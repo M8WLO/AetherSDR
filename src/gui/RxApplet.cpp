@@ -773,6 +773,8 @@ void RxApplet::buildUI()
             emit noiseFloorEnableChanged(on);
             emit sqlAutoChanged(on);
             m_sqlSlider->setEnabled(!on);
+            if (on && m_sqlBtn && !m_sqlBtn->isChecked())
+                m_sqlBtn->setChecked(true);  // enabling auto SQL implicitly enables the gate
         });
 
         rightCol->addLayout(row2);

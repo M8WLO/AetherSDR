@@ -1415,11 +1415,22 @@ void SpectrumWidget::updateSpectrum(const QVector<float>& binsDbm)
             float sample     = sorted[n / 5];              // 20th percentile — floor ref
             float peakSample = sorted[std::min(n * 19 / 20, n - 1)]; // 95th percentile — for auto-SQL
 
-            // Heavy EWMA (α=0.05 ≈ 20-sample window) prevents jumping.
-            if (m_noiseFloorDbm <= -200.0f)
+            // Signal-presence gate: if the spread between 80th and 20th
+            // percentile exceeds 15 dBm a signal is riding the band.  Freeze
+            // the floor EWMA so AGC-induced apparent dips don't drag the
+            // auto-squelch threshold down mid-transmission.
+            const float p80    = sorted[std::min(n * 4 / 5, n - 1)];
+            const bool signalPresent = (p80 - sample) > 15.0f;
+
+            // Asymmetric EWMA: rise fast (band got noisier → raise threshold
+            // quickly to protect ears), fall slowly (apparent drop may just be
+            // AGC reacting to a signal — don't chase it down).
+            if (m_noiseFloorDbm <= -200.0f) {
                 m_noiseFloorDbm = sample;
-            else
-                m_noiseFloorDbm = 0.05f * sample + 0.95f * m_noiseFloorDbm;
+            } else if (!signalPresent) {
+                const float alpha = (sample > m_noiseFloorDbm) ? 0.15f : 0.02f;
+                m_noiseFloorDbm = alpha * sample + (1.0f - alpha) * m_noiseFloorDbm;
+            }
 
             if (m_noiseFloorPeakDbm <= -200.0f)
                 m_noiseFloorPeakDbm = peakSample;
