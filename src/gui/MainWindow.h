@@ -307,10 +307,6 @@ private:
         // Hit timestamps for the last 10 seconds. Used to detect both
         // qualification streaks and QRM persistence (>90% occupancy).
         QVector<qint64> hitTimestamps;
-        // Qualification streak: set when the entry first starts qualifying;
-        // cleared if the signal vanishes completely (no hits for >1 s).
-        // Once the streak reaches 3 s the marker becomes visible.
-        qint64          qualifyStartMs{0};
         bool            visible{false};
         bool            confirmedVoice{false}; // true once shown as a gold voice marker
         qint64          lastGapMs{0};          // last time a ≥1 s gap was detected (epoch ms)

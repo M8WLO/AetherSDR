@@ -12892,7 +12892,8 @@ void MainWindow::rebuildSHistoryForPan(const QString& panId)
     constexpr qint64 kQrmWindowMs       = 15000; // timestamp retention window
     constexpr qint64 kHitWindowMs       = 1000;
     constexpr int    kMinHits           = 1;
-    constexpr qint64 kQualifyMs         = 3000;  // 3-second streak before showing
+    constexpr qint64 kQualifyMs         = 3000;  // min age before a new signal becomes visible
+    constexpr int    kQualifyMinHits    = 3;     // min detections within kQualifyMs to qualify
     constexpr qint64 kNarrowQrmGateMs   = 6000;  // narrow/wideband: show QRM after 6 s
     // Require 70% frame occupancy over 6 s, derived from observed fps rather than
     // the old hard-coded 105 (which assumed 25 fps and broke at 10 fps or 60 fps).
@@ -12959,7 +12960,6 @@ void MainWindow::rebuildSHistoryForPan(const QString& panId)
         // Hide visible markers absent for 30 seconds (the "past signals" history window).
         if (e.visible && !currentlyActive && (now - e.lastSeenMs) > kHideAfterMs) {
             e.visible = false;
-            e.qualifyStartMs = 0;
         }
 
         if (!e.visible) {
@@ -12971,17 +12971,21 @@ void MainWindow::rebuildSHistoryForPan(const QString& panId)
             if (isNarrowCarrier || isWidebandCarrier) {
                 if (e.suspectQrm) { e.visible = true; }
             } else if (currentlyActive) {
-                if (e.qualifyStartMs == 0) { e.qualifyStartMs = now; }
-                // Confirmed voice re-qualifies in 2 s; new signals need 3 s.
+                // Qualify by total age since first detection, not streak length.
+                // Bursty signals (pileups, intermittent operators) qualify as soon
+                // as they have been known for kQualifyMs AND have accumulated at
+                // least kQualifyMinHits detections in that window.  This rejects
+                // transient noise that appears once and disappears while still
+                // allowing intermittent but real signals (pileups, bursty digital).
                 const qint64 requiredMs = e.confirmedVoice ? 2000LL : kQualifyMs;
-                if ((now - e.qualifyStartMs) >= requiredMs && now >= suppressUntil) {
+                const int hitsInQualify = static_cast<int>(std::count_if(
+                    e.hitTimestamps.constBegin(), e.hitTimestamps.constEnd(),
+                    [now, requiredMs](qint64 t) { return (now - t) <= requiredMs; }));
+                const bool enoughHits = e.confirmedVoice || (hitsInQualify >= kQualifyMinHits);
+                if ((now - e.firstDetectedMs) >= requiredMs && enoughHits && now >= suppressUntil) {
                     e.visible = true;
                     if (!e.suspectQrm) { e.confirmedVoice = true; }
                 }
-            } else if ((now - e.lastSeenMs) > 3000) {
-                // Reset streak only after 3 s of no detections — inter-word pauses
-                // and brief FFT gaps don't restart the qualify clock.
-                e.qualifyStartMs = 0;
             }
         }
     }
