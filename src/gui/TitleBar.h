@@ -1,10 +1,12 @@
 #pragma once
 
+#include <QString>
 #include <QWidget>
 
 class QPushButton;
 class QSlider;
 class QLabel;
+class QFrame;
 class QMenuBar;
 class QHBoxLayout;
 class QTimer;
@@ -21,6 +23,7 @@ public:
     void setMenuBar(QMenuBar* mb);
 
     void setPcAudioEnabled(bool on);
+    void setPcAudioDevices(const QString& inputDevice, const QString& outputDevice);
     void setLineoutMuted(bool muted);
     void setMasterVolume(int pct);
     void setHeadphoneVolume(int pct);
@@ -71,6 +74,7 @@ private:
     bool finishWindowMove(QMouseEvent* ev);
     void handleTitleDoubleClick(QMouseEvent* ev);
     void showFeatureRequestDialogImpl();
+    void updatePcAudioToolTip();
     QHBoxLayout* m_hbox{nullptr};
     QMenuBar*    m_menuBar{nullptr};
     QLabel*      m_appNameLabel{nullptr};
@@ -92,6 +96,7 @@ private:
     QLabel*      m_dockLeftLbl{nullptr};
     QLabel*      m_dockRightLbl{nullptr};
     QLabel*      m_popOutLbl{nullptr};
+    QFrame*      m_dockSep{nullptr};
     bool         m_minimalMode{false};
     bool         m_windowMoveActive{false};
     bool         m_windowMoveUsesSystem{false};
@@ -106,6 +111,8 @@ private:
     bool         m_alarmRed{false};
     bool         m_blinkEnabled{true};  // persisted via AppSettings "HeartbeatBlinkEnabled"
     bool         m_discovering{false};  // solid amber while waiting for connection
+    QString      m_pcAudioInputDevice;
+    QString      m_pcAudioOutputDevice;
 
 protected:
     // Drag-to-move + double-click-to-maximize for frameless main window.

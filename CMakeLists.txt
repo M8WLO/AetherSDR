@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AetherSDR VERSION 0.9.8 LANGUAGES C CXX)
+project(AetherSDR VERSION 26.5.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -421,6 +421,7 @@ set(CORE_SOURCES
     src/core/TgxlConnection.cpp
     src/core/CommandParser.cpp
     src/core/AudioEngine.cpp
+    src/core/TxMicChannelNormalizer.cpp
     src/core/ChannelStripPresets.cpp
     src/core/ClientEq.cpp
     src/core/ClientComp.cpp
@@ -531,6 +532,7 @@ set(MODEL_SOURCES
 
 set(GUI_SOURCES
     src/gui/MainWindow.cpp
+    src/gui/AudioDeviceChangeDialog.cpp
     src/gui/ConnectionPanel.cpp
     src/gui/ClientDisconnectDialog.cpp
     src/gui/ConnectedStationsDialog.cpp
@@ -748,12 +750,32 @@ if(APPLE)
     )
     target_link_libraries(AetherSDR PRIVATE "-framework AVFoundation" "-framework Accelerate")
     target_sources(AetherSDR PRIVATE src/core/MacNRFilter.cpp)
-    set(MACOSX_ICON "${CMAKE_SOURCE_DIR}/docs/AetherSDR.icns")
-    if(EXISTS "${MACOSX_ICON}")
-        target_sources(AetherSDR PRIVATE "${MACOSX_ICON}")
-        set_source_files_properties("${MACOSX_ICON}" PROPERTIES
-            MACOSX_PACKAGE_LOCATION "Resources")
-    endif()
+
+    # Generate AetherSDR.icns at build time from docs/logo-circle.png so local
+    # builds get an app icon without any extra setup (sips and iconutil are
+    # part of macOS).
+    set(ICON_SOURCE "${CMAKE_SOURCE_DIR}/docs/logo-circle.png")
+    set(ICNS_PATH "${CMAKE_BINARY_DIR}/AetherSDR.icns")
+    set(ICONSET_PATH "${CMAKE_BINARY_DIR}/AetherSDR.iconset")
+    add_custom_command(
+        OUTPUT "${ICNS_PATH}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${ICONSET_PATH}"
+        COMMAND sips -z 16  16  "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_16x16.png"
+        COMMAND sips -z 32  32  "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_16x16@2x.png"
+        COMMAND sips -z 32  32  "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_32x32.png"
+        COMMAND sips -z 64  64  "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_32x32@2x.png"
+        COMMAND sips -z 128 128 "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_128x128.png"
+        COMMAND sips -z 256 256 "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_128x128@2x.png"
+        COMMAND sips -z 256 256 "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_256x256.png"
+        COMMAND sips -z 512 512 "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_256x256@2x.png"
+        COMMAND sips -z 512 512 "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_512x512.png"
+        COMMAND sips -z 1024 1024 "${ICON_SOURCE}" --out "${ICONSET_PATH}/icon_512x512@2x.png"
+        COMMAND iconutil -c icns "${ICONSET_PATH}" -o "${ICNS_PATH}"
+        DEPENDS "${ICON_SOURCE}"
+        COMMENT "Generating AetherSDR.icns"
+    )
+    target_sources(AetherSDR PRIVATE "${ICNS_PATH}")
+    set_source_files_properties("${ICNS_PATH}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 elseif(WIN32)
     # Windows application icon (taskbar, Start Menu, Alt-Tab)
     set(WIN_RC "${CMAKE_SOURCE_DIR}/docs/AetherSDR.rc")
@@ -884,7 +906,9 @@ if(HIDAPI_FOUND)
     target_compile_definitions(AetherSDR PRIVATE HAVE_HIDAPI)
     target_sources(AetherSDR PRIVATE
         src/core/HidEncoderManager.cpp
-        src/core/HidDeviceParser.cpp)
+        src/core/HidEncoderManager.h
+        src/core/HidDeviceParser.cpp
+        src/core/HidDeviceParser.h)
     set(HIDAPI_NORMALIZED_INCLUDE_DIRS ${HIDAPI_INCLUDE_DIRS})
     foreach(hidapi_dir IN LISTS HIDAPI_INCLUDE_DIRS)
         if(EXISTS "${hidapi_dir}/hidapi.h")
@@ -1225,6 +1249,18 @@ add_executable(client_quindar_test
 )
 target_include_directories(client_quindar_test PRIVATE src)
 target_link_libraries(client_quindar_test PRIVATE Qt6::Core)
+
+add_executable(tx_mic_channel_normalizer_test
+    tests/tx_mic_channel_normalizer_test.cpp
+    src/core/TxMicChannelNormalizer.cpp
+    src/core/Resampler.cpp
+)
+target_include_directories(tx_mic_channel_normalizer_test PRIVATE
+    src
+    ${CMAKE_SOURCE_DIR}/third_party/r8brain
+)
+target_link_libraries(tx_mic_channel_normalizer_test PRIVATE Qt6::Core)
+add_test(NAME tx_mic_channel_normalizer_test COMMAND tx_mic_channel_normalizer_test)
 
 add_executable(client_gate_test
     tests/client_gate_test.cpp

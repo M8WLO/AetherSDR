@@ -64,7 +64,9 @@ cmake --build build -j$(nproc)
 
 Full dependency list is in `README.md` — don't duplicate it here.
 
-Current version: **0.9.8** (set in both `CMakeLists.txt` and `README.md`).
+Current version: **26.5.1** (set in both `CMakeLists.txt` and `README.md`).
+Versioning scheme is **CalVer** (`YY.M.patch`) starting with this release, the
+1.0-equivalent. Earlier tags used semver through v0.9.8.
 
 ---
 
@@ -155,6 +157,15 @@ audio payload, meter data — see `docs/vita49-format.md`.
 ---
 
 ## Key Implementation Patterns
+
+### Adding or converting a dialog
+
+See **[`docs/dialog-patterns.md`](docs/dialog-patterns.md)** before writing
+or modifying a `QDialog`. It documents the canonical
+lazy-construct + non-modal + geometry-persist + frameless-chrome pattern,
+the common pitfalls that have hit real PRs, and the existing dialogs to
+use as reference. Tracked for cleanup in #2605 (`PersistentDialog` base
+class).
 
 ### Settings Persistence (AppSettings — NOT QSettings)
 
