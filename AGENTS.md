@@ -179,6 +179,13 @@ for that before the next CI run can use it.
 branch, pushes, opens a PR with auto-squash-merge enabled. Commit freely
 locally, then ship once.
 
+**PR branch hygiene — mandatory before every push:** Always rebase each PR
+branch onto `upstream/main` (ten9876/AetherSDR) before pushing or
+force-pushing. `git rebase upstream/main` on the PR branch, then
+`git push origin <branch> --force-with-lease`. This keeps diffs clean
+(commits already on upstream are automatically skipped), resolves scope-creep
+review comments, and keeps the PR title honest about what actually changed.
+
 Branch protection: signed commits required on main, CI must pass, CODEOWNERS
 review required, branches auto-delete after merge.
 
