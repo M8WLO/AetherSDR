@@ -375,16 +375,17 @@ void MidiControlManager::onMidiMessage(int status, int data1, int data2,
     }
 
     // ── Relative knob mode: decode delta and accumulate ────────────────
+    //
+    // Explicit-relative bindings (user picked Relative in MIDI Learn) are
+    // assumed to use two's-complement encoding — that's what the relative
+    // flag has always meant, and overloading it with a binary-mode override
+    // for the VFO would silently flip CCW pulses (data2=127, two's-complement
+    // -1) to CW for users with existing two's-complement encoders bound to
+    // the VFO knob.  Binary-mode encoders (data2 ∈ {0, 127}) instead fall
+    // through to the backward-compat Tier 1 below, which handles them
+    // without requiring the relative flag.
     if (binding.relative && msgType == MidiBinding::CC) {
-        int delta;
-        if (isVfoTuneKnobParamId(binding.paramId) && (data2 == 0 || data2 == 127)) {
-            // Binary/Thetis convention for VFO: 127 = CW (+1), 0 = CCW (-1).
-            // relativeCcDelta would give 0 and -1 respectively — wrong for this style.
-            delta = (data2 == 127) ? 1 : -1;
-        } else {
-            // Standard two's complement: 1-63 = CW, 65-127 = CCW (127=-1, 126=-2)
-            delta = relativeCcDelta(data2);
-        }
+        int delta = relativeCcDelta(data2);
         if (binding.inverted) delta = -delta;
 
         accumulateRelativeStep(binding.paramId, delta);
@@ -412,6 +413,11 @@ void MidiControlManager::onMidiMessage(int status, int data1, int data2,
 
     // Tier 2 — center-64 encoding (MidiController Continuous, Behringer, Arturia):
     //   value - 64 = signed step count.  64 = neutral; 0/1/127 consumed by Tier 1.
+    //
+    // Intentionally swallows absolute-mode handling for VFO bindings: absolute
+    // control of an endless dial is nonsensical, and routing any non-64 value
+    // here keeps a single dial bound to the VFO knob doing useful work
+    // regardless of which encoding the controller actually uses.
     if (!binding.relative
         && isVfoTuneKnobParamId(binding.paramId)
         && msgType == MidiBinding::CC
