@@ -7,15 +7,6 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Verify What's New data includes the current version.
-# Run scripts/gen_whatsnew.py after updating CHANGELOG.md for a new release.
-file(READ "${CMAKE_SOURCE_DIR}/src/generated/WhatsNewData.cpp" _whatsnew_content)
-if(NOT _whatsnew_content MATCHES "\"${PROJECT_VERSION}\"")
-    message(FATAL_ERROR
-        "WhatsNewData.cpp has no entry for version ${PROJECT_VERSION}. "
-        "Update CHANGELOG.md and run: python3 scripts/gen_whatsnew.py CHANGELOG.md src/generated/WhatsNewData.cpp")
-endif()
-
 # macOS: ensure Homebrew lib/include paths are in the search path
 # (universal builds with CMAKE_OSX_ARCHITECTURES may not search /opt/homebrew by default)
 if(APPLE)
@@ -434,6 +425,7 @@ set(CORE_SOURCES
     src/core/NetworkPathResolver.cpp
     src/core/TgxlConnection.cpp
     src/core/CommandParser.cpp
+    src/core/AudioSummaryLogger.cpp
     src/core/AudioEngine.cpp
     src/core/TxMicChannelNormalizer.cpp
     src/core/ChannelStripPresets.cpp
@@ -466,6 +458,7 @@ set(CORE_SOURCES
     src/core/SpotCollectorClient.cpp
     src/core/PotaClient.cpp
     src/core/PropForecastClient.cpp
+    src/core/MqttAntennaAlias.cpp
     src/core/SpotCommandPolicy.cpp
     src/core/SpotModeResolver.cpp
     src/core/RigctlServer.cpp
@@ -559,12 +552,14 @@ set(GUI_SOURCES
     src/gui/ConnectedStationsDialog.cpp
     src/gui/SpectrumWidget.cpp
     src/gui/SpectrumOverlayMenu.cpp
+    src/gui/FrequencyEntryParser.cpp
     src/gui/SliceColorManager.cpp
     src/gui/SliceLabel.cpp
     src/gui/VfoWidget.cpp
     src/gui/RadioSetupDialog.cpp
     src/gui/NetworkDiagnosticsDialog.cpp
     src/gui/Ax25HfPacketDecodeDialog.cpp
+    src/gui/FlexControlDialog.cpp
     src/gui/PropDashboardDialog.cpp
     src/gui/MemoryCommands.cpp
     src/gui/MemoryBrowsePanel.cpp
@@ -574,6 +569,7 @@ set(GUI_SOURCES
     src/gui/AetherDspWidget.cpp
     src/gui/WaveformsDialog.cpp
     src/gui/ClientRxDspApplet.cpp
+    src/gui/DragValuePopup.cpp
     src/gui/DspParamPopup.cpp
     src/gui/DxClusterDialog.cpp
     src/gui/DxClusterStartupCommandsDialog.cpp
@@ -681,7 +677,6 @@ set(ALL_SOURCES
     ${CORE_SOURCES}
     ${MODEL_SOURCES}
     ${GUI_SOURCES}
-    src/generated/WhatsNewData.cpp
 )
 
 # Bundled RNNoise (Mozilla/Xiph BSD-3) — client-side neural noise suppression
@@ -776,9 +771,30 @@ else()
     target_compile_options(aether_libmodem_core PRIVATE -w)
 endif()
 
-qt_add_resources(RESOURCES resources.qrc)
+qt_add_resources(RESOURCES resources/resources.qrc)
 
 add_executable(AetherSDR ${ALL_SOURCES} ${RNNOISE_SOURCES} ${GGMORSE_SOURCES} ${RADE_SOURCES} ${BNR_SOURCES} ${SPECBLEACH_SOURCES} ${RESOURCES})
+
+# Capture the git short SHA at configure time and surface it in the About
+# dialog so dev/test builds are identifiable.  Falls back to "unknown" for
+# source-tarball builds where .git is absent.
+find_package(Git QUIET)
+set(AETHER_GIT_SHA "unknown")
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _aether_git_sha_out
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE _aether_git_sha_rv
+    )
+    if(_aether_git_sha_rv EQUAL 0 AND NOT "${_aether_git_sha_out}" STREQUAL "")
+        set(AETHER_GIT_SHA "${_aether_git_sha_out}")
+    endif()
+endif()
+target_compile_definitions(AetherSDR PRIVATE AETHER_GIT_SHA="${AETHER_GIT_SHA}")
+message(STATUS "Build SHA: ${AETHER_GIT_SHA}")
 
 # Windows: GUI app (no console window) + icon resource
 if(WIN32)
@@ -826,7 +842,7 @@ if(APPLE)
     set_source_files_properties("${ICNS_PATH}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 elseif(WIN32)
     # Windows application icon (taskbar, Start Menu, Alt-Tab)
-    set(WIN_RC "${CMAKE_SOURCE_DIR}/docs/AetherSDR.rc")
+    set(WIN_RC "${CMAKE_SOURCE_DIR}/packaging/windows/AetherSDR.rc")
     if(EXISTS "${WIN_RC}")
         target_sources(AetherSDR PRIVATE "${WIN_RC}")
     endif()
@@ -1454,6 +1470,14 @@ add_executable(xvtr_policy_test
 target_include_directories(xvtr_policy_test PRIVATE src)
 target_link_libraries(xvtr_policy_test PRIVATE Qt6::Core)
 
+add_executable(frequency_entry_parser_test
+    tests/frequency_entry_parser_test.cpp
+    src/gui/FrequencyEntryParser.cpp
+)
+target_include_directories(frequency_entry_parser_test PRIVATE src)
+target_link_libraries(frequency_entry_parser_test PRIVATE Qt6::Core)
+add_test(NAME frequency_entry_parser_test COMMAND frequency_entry_parser_test)
+
 add_executable(radio_status_ownership_test
     tests/radio_status_ownership_test.cpp
     src/core/CommandParser.cpp
@@ -1482,6 +1506,14 @@ target_include_directories(antenna_alias_test PRIVATE src)
 target_link_libraries(antenna_alias_test PRIVATE Qt6::Core)
 set_target_properties(antenna_alias_test PROPERTIES AUTOMOC ON)
 add_test(NAME antenna_alias_test COMMAND antenna_alias_test)
+
+add_executable(mqtt_antenna_alias_test
+    tests/mqtt_antenna_alias_test.cpp
+    src/core/MqttAntennaAlias.cpp
+)
+target_include_directories(mqtt_antenna_alias_test PRIVATE src)
+target_link_libraries(mqtt_antenna_alias_test PRIVATE Qt6::Core)
+add_test(NAME mqtt_antenna_alias_test COMMAND mqtt_antenna_alias_test)
 
 # Pure-math test for the ATU pre-tune center-frequency calculator.
 # Locks in the IARU R1 reference table from issue #2624 so future edits
@@ -1687,6 +1719,15 @@ target_link_libraries(container_nesting_test PRIVATE
 )
 set_target_properties(container_nesting_test PROPERTIES AUTOMOC ON)
 
+# Integration test — requires a running AetherSDR instance.
+# Not added to ctest; run manually:
+#   ./build/rigctld_test [--host HOST] [--port PORT] [--ptt] [--cw]
+add_executable(rigctld_test
+    tests/rigctld_test.cpp
+)
+target_include_directories(rigctld_test PRIVATE src)
+target_link_libraries(rigctld_test PRIVATE Qt6::Core Qt6::Network)
+
 
 # ── Install rules ────────────────────────────────────────────────────────────
 include(GNUInstallDirs)
@@ -1699,7 +1740,7 @@ else()
     install(TARGETS AetherSDR
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
-    install(FILES AetherSDR.desktop
+    install(FILES packaging/linux/AetherSDR.desktop
         DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
     )
     install(FILES docs/assets/logo-circle.png
